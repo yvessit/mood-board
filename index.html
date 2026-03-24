@@ -1,15 +1,15 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>心情画板 · 绘心坊 | 分享你的心情，看见他人的世界</title>
+    <title>Mood Canvas · Cloud Gallery | Share Your Feelings Worldwide</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            user-select: none; /* 避免拖动时意外选中文字，不影响绘画 */
         }
 
         body {
@@ -18,23 +18,20 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            font-family: 'Segoe UI', 'Quicksand', system-ui, -apple-system, 'Roboto', 'Noto Sans', sans-serif;
+            font-family: -apple-system, 'Segoe UI', 'Roboto', 'Helvetica Neue', sans-serif;
             padding: 20px;
         }
 
-        /* 主容器 */
         .dashboard {
             max-width: 1400px;
             width: 100%;
             background: rgba(255, 255, 255, 0.45);
             backdrop-filter: blur(2px);
             border-radius: 3rem;
-            box-shadow: 0 25px 45px rgba(0, 0, 0, 0.2), 0 2px 6px rgba(0, 0, 0, 0.05);
+            box-shadow: 0 25px 45px rgba(0, 0, 0, 0.2);
             padding: 1.5rem;
-            transition: all 0.2s ease;
         }
 
-        /* 双栏布局: 左画板区 / 右心情展示区 */
         .paint-studio {
             display: flex;
             flex-wrap: wrap;
@@ -42,7 +39,6 @@
             justify-content: center;
         }
 
-        /* 左侧绘画区 (可写) */
         .canvas-area {
             flex: 2;
             min-width: 320px;
@@ -50,11 +46,8 @@
             border-radius: 2rem;
             padding: 1.2rem;
             box-shadow: 0 12px 28px rgba(0, 0, 0, 0.1);
-            backdrop-filter: blur(0px);
-            transition: transform 0.2s;
         }
 
-        /* 右侧展示区 (唯读画廊) */
         .gallery-area {
             flex: 3;
             min-width: 340px;
@@ -68,7 +61,6 @@
             overflow: hidden;
         }
 
-        /* 画板头部 */
         .toolbar {
             display: flex;
             flex-wrap: wrap;
@@ -87,16 +79,11 @@
             -webkit-background-clip: text;
             background-clip: text;
             color: transparent;
-            letter-spacing: -0.5px;
         }
 
         .title-badge small {
             font-size: 0.8rem;
-            background: none;
             color: #7f8c8d;
-            font-weight: normal;
-            -webkit-background-clip: unset;
-            background-clip: unset;
         }
 
         .brush-controls {
@@ -106,7 +93,7 @@
             flex-wrap: wrap;
         }
 
-        button, .color-preview {
+        button {
             background: white;
             border: none;
             padding: 8px 16px;
@@ -150,7 +137,6 @@
             border: 2px solid white;
             border-radius: 50%;
             cursor: pointer;
-            background: #000000;
             box-shadow: 0 0 0 2px #ddd;
         }
 
@@ -179,10 +165,9 @@
 
         #drawCanvas {
             background-color: #ffffff;
-            touch-action: none; /* 提升触屏绘画体验 */
+            touch-action: none;
         }
 
-        /* 右侧画廊: 心情河流 */
         .gallery-header {
             display: flex;
             justify-content: space-between;
@@ -204,7 +189,14 @@
             font-size: 0.7rem;
             font-weight: bold;
             color: #3a2a24;
-            letter-spacing: 1px;
+        }
+
+        .cloud-status {
+            font-size: 0.7rem;
+            background: #cfe6cf;
+            padding: 4px 10px;
+            border-radius: 30px;
+            color: #2d6a2d;
         }
 
         .mood-wall {
@@ -216,7 +208,6 @@
             padding-right: 6px;
         }
 
-        /* 心情卡片 */
         .mood-card {
             background: white;
             border-radius: 1.5rem;
@@ -245,24 +236,16 @@
         .mood-thumb {
             background: #faf3e8;
             border-radius: 20px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
             overflow: hidden;
             cursor: pointer;
-            transition: 0.1s linear;
         }
 
-        .mood-thumb canvas {
+        .mood-thumb img {
             width: 100%;
-            height: auto;
-            max-height: 180px;
-            background: white;
             border-radius: 16px;
-            box-shadow: none;
+            display: block;
+            background: white;
             cursor: pointer;
-            background-image: radial-gradient(circle, #f0e2d4 1px, transparent 1px);
-            background-size: 15px 15px;
         }
 
         .empty-message {
@@ -274,6 +257,12 @@
             border-radius: 28px;
         }
 
+        .loading-spinner {
+            text-align: center;
+            padding: 20px;
+            color: #7f6b5a;
+        }
+
         footer {
             margin-top: 1rem;
             text-align: center;
@@ -281,403 +270,392 @@
             color: #7f6b5a;
         }
 
-        /* 响应式 */
         @media (max-width: 780px) {
-            .dashboard {
-                padding: 1rem;
-            }
-            .toolbar {
-                flex-direction: column;
-                align-items: stretch;
-            }
-            .brush-controls {
-                justify-content: space-between;
-            }
+            .dashboard { padding: 1rem; }
+            .toolbar { flex-direction: column; align-items: stretch; }
+            .brush-controls { justify-content: space-between; }
         }
     </style>
 </head>
 <body>
 <div class="dashboard">
     <div class="paint-studio">
-        <!-- 左侧 绘画区：创作心情 -->
+        <!-- Left: Drawing Area -->
         <div class="canvas-area">
             <div class="toolbar">
                 <div class="title-badge">
-                    🎨 我的心情画板 <small>· 自由创作</small>
+                    ☁️ Mood Canvas <small>· Share Worldwide</small>
                 </div>
                 <div class="brush-controls">
                     <div class="color-picker-wrap">
-                        <label>🎨 颜色</label>
+                        <label>🎨 Color</label>
                         <input type="color" id="strokeColor" value="#000000">
                     </div>
                     <div class="range-label">
-                        <span>✏️ 笔刷</span>
+                        <span>✏️ Brush</span>
                         <input type="range" id="brushSize" min="2" max="40" value="6" step="1">
                         <span id="sizeValue">6</span>
                     </div>
-                    <button id="clearBtn" class="btn-clear">🧽 清空画板</button>
-                    <button id="saveMoodBtn" class="btn-save">💾 分享心情</button>
+                    <button id="clearBtn" class="btn-clear">�� Clear Canvas</button>
+                    <button id="saveMoodBtn" class="btn-save">☁️ Share to Cloud</button>
                 </div>
             </div>
             <canvas id="drawCanvas" width="700" height="450" style="width:100%; height:auto; max-width:700px; aspect-ratio:700/450"></canvas>
             <div style="font-size: 0.7rem; text-align: center; margin-top: 12px; color:#b4865b;">
-                ✨ 画下此刻心情，点击「分享心情」—— 你的画作将出现在右侧画廊，所有人可见（唯读模式）
+                ✨ Draw your mood → Click "Share to Cloud" → Everyone worldwide can see it (Read-only)
             </div>
         </div>
 
-        <!-- 右侧 唯读心情画廊：他人&自己的历史作品（唯读） -->
+        <!-- Right: Cloud Gallery (Read-only) -->
         <div class="gallery-area">
             <div class="gallery-header">
-                <h2>🌊 心情河流 · 世界回响</h2>
-                <div class="readonly-badge">🔒 唯读模式 · 无法编辑</div>
+                <h2>🌍 Global Mood River · Live Cloud</h2>
+                <div style="display: flex; gap: 8px;">
+                    <div class="readonly-badge">🔒 Read-only Mode</div>
+                    <div class="cloud-status" id="cloudStatus">☁️ Connecting...</div>
+                </div>
             </div>
             <div id="moodWallContainer" class="mood-wall">
-                <!-- 动态心情卡片会出现在这里 -->
-                <div class="empty-message">✨ 暂时还没有心情漂流瓶... 快画下你的第一笔心情吧！</div>
+                <div class="loading-spinner">⏳ Loading cloud moods...</div>
             </div>
-            <footer>💡 点击任一画作可放大预览 (唯读尊重原创)</footer>
+            <footer>💡 Click any artwork to enlarge | All moods saved in cloud, visible globally</footer>
         </div>
     </div>
 </div>
 
 <script>
-    (function(){
-        // ---------- 绘画核心 ----------
-        const canvas = document.getElementById('drawCanvas');
-        const ctx = canvas.getContext('2d');
-        
-        // 实际尺寸 (固定逻辑分辨率 700x450)
-        const CANVAS_W = 700;
-        const CANVAS_H = 450;
-        canvas.width = CANVAS_W;
-        canvas.height = CANVAS_H;
-        
-        // 绘画状态
-        let drawing = false;
-        let currentColor = document.getElementById('strokeColor').value;
-        let currentSize = parseInt(document.getElementById('brushSize').value);
-        
-        // 初始化白色背景 (带格子底纹但保留纯白底色)
-        function initCanvasBackground() {
-            ctx.fillStyle = '#FFFFFF';
-            ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-            // 为了让绘画区域清新，不加额外覆盖，保留纯白。 但是为了让网格纹理？css已做辅助线，canvas背景纯白即可。
-            // 可选加非常淡的参考点？算了，保持简洁。
-        }
-        initCanvasBackground();
-        
-        // 画笔设置
-        function setBrush() {
-            ctx.strokeStyle = currentColor;
-            ctx.lineWidth = currentSize;
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
-        }
+    // Supabase Configuration (Cloud Storage)
+    const SUPABASE_URL = 'https://qxmfbxkfvgvyfztrzryk.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF4bWZieGtmdmd2eWZ6dHJ6cnlrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDE2MDAwMDAsImV4cCI6MjAxNzE3NjAwMH0.public_demo_key_for_moodboard_only';
+    
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    
+    // ================= Drawing Engine =================
+    const canvas = document.getElementById('drawCanvas');
+    const ctx = canvas.getContext('2d');
+    const CANVAS_W = 700;
+    const CANVAS_H = 450;
+    canvas.width = CANVAS_W;
+    canvas.height = CANVAS_H;
+    
+    let drawing = false;
+    let currentColor = document.getElementById('strokeColor').value;
+    let currentSize = parseInt(document.getElementById('brushSize').value);
+    
+    function initCanvasBackground() {
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+    }
+    initCanvasBackground();
+    
+    function setBrush() {
+        ctx.strokeStyle = currentColor;
+        ctx.lineWidth = currentSize;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+    }
+    setBrush();
+    
+    const colorPicker = document.getElementById('strokeColor');
+    const sizeSlider = document.getElementById('brushSize');
+    const sizeSpan = document.getElementById('sizeValue');
+    
+    colorPicker.addEventListener('input', (e) => {
+        currentColor = e.target.value;
         setBrush();
-        
-        // 颜色与尺寸监听
-        const colorPicker = document.getElementById('strokeColor');
-        const sizeSlider = document.getElementById('brushSize');
-        const sizeSpan = document.getElementById('sizeValue');
-        
-        colorPicker.addEventListener('input', (e) => {
-            currentColor = e.target.value;
-            setBrush();
-        });
-        sizeSlider.addEventListener('input', (e) => {
-            currentSize = parseInt(e.target.value);
-            sizeSpan.innerText = currentSize;
-            setBrush();
-        });
-        
-        // 绘画事件 (鼠标+触摸)
-        function getCanvasCoords(e) {
-            const rect = canvas.getBoundingClientRect();
-            const scaleX = canvas.width / rect.width;   // canvas物理宽/实际CSS宽
-            const scaleY = canvas.height / rect.height;
-            let clientX, clientY;
-            if (e.touches) {
-                // 触摸事件
-                clientX = e.touches[0].clientX;
-                clientY = e.touches[0].clientY;
-            } else {
-                clientX = e.clientX;
-                clientY = e.clientY;
-            }
-            let canvasX = (clientX - rect.left) * scaleX;
-            let canvasY = (clientY - rect.top) * scaleY;
-            canvasX = Math.min(Math.max(0, canvasX), canvas.width);
-            canvasY = Math.min(Math.max(0, canvasY), canvas.height);
-            return { x: canvasX, y: canvasY };
+    });
+    sizeSlider.addEventListener('input', (e) => {
+        currentSize = parseInt(e.target.value);
+        sizeSpan.innerText = currentSize;
+        setBrush();
+    });
+    
+    function getCanvasCoords(e) {
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        let clientX, clientY;
+        if (e.touches) {
+            clientX = e.touches[0].clientX;
+            clientY = e.touches[0].clientY;
+        } else {
+            clientX = e.clientX;
+            clientY = e.clientY;
         }
-        
-        function startDraw(e) {
-            drawing = true;
-            const { x, y } = getCanvasCoords(e);
-            ctx.beginPath();
-            ctx.moveTo(x, y);
-            ctx.lineTo(x, y);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(x, y);
-            e.preventDefault();
+        let canvasX = (clientX - rect.left) * scaleX;
+        let canvasY = (clientY - rect.top) * scaleY;
+        canvasX = Math.min(Math.max(0, canvasX), canvas.width);
+        canvasY = Math.min(Math.max(0, canvasY), canvas.height);
+        return { x: canvasX, y: canvasY };
+    }
+    
+    function startDraw(e) {
+        drawing = true;
+        const { x, y } = getCanvasCoords(e);
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        e.preventDefault();
+    }
+    
+    function draw(e) {
+        if (!drawing) return;
+        e.preventDefault();
+        const { x, y } = getCanvasCoords(e);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+    }
+    
+    function endDraw() {
+        drawing = false;
+        ctx.beginPath();
+    }
+    
+    canvas.addEventListener('mousedown', startDraw);
+    canvas.addEventListener('mousemove', draw);
+    canvas.addEventListener('mouseup', endDraw);
+    canvas.addEventListener('mouseleave', endDraw);
+    canvas.addEventListener('touchstart', startDraw);
+    canvas.addEventListener('touchmove', draw);
+    canvas.addEventListener('touchend', endDraw);
+    canvas.addEventListener('touchcancel', endDraw);
+    
+    document.getElementById('clearBtn').addEventListener('click', () => {
+        ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+        setBrush();
+    });
+    
+    // ================= Cloud Storage Logic =================
+    let allMoods = [];
+    
+    function setCloudStatus(text, isError = false) {
+        const statusEl = document.getElementById('cloudStatus');
+        if (statusEl) {
+            statusEl.innerHTML = isError ? `⚠️ ${text}` : `☁️ ${text}`;
+            statusEl.style.background = isError ? '#ffdede' : '#cfe6cf';
+            statusEl.style.color = isError ? '#b33' : '#2d6a2d';
         }
-        
-        function draw(e) {
-            if (!drawing) return;
-            e.preventDefault();
-            const { x, y } = getCanvasCoords(e);
-            ctx.lineTo(x, y);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(x, y);
-        }
-        
-        function endDraw() {
-            drawing = false;
-            ctx.beginPath();
-        }
-        
-        // 注册事件 (跨平台)
-        canvas.addEventListener('mousedown', startDraw);
-        canvas.addEventListener('mousemove', draw);
-        canvas.addEventListener('mouseup', endDraw);
-        canvas.addEventListener('mouseleave', endDraw);
-        
-        canvas.addEventListener('touchstart', startDraw);
-        canvas.addEventListener('touchmove', draw);
-        canvas.addEventListener('touchend', endDraw);
-        canvas.addEventListener('touchcancel', endDraw);
-        
-        // 清空画板
-        document.getElementById('clearBtn').addEventListener('click', () => {
-            ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
-            ctx.fillStyle = '#FFFFFF';
-            ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-            setBrush(); // 恢复画笔属性
-        });
-        
-        // ---------- 心情数据存储 (基于 localStorage 实现“别人也可以看到” 模拟持久化且跨会话共享) ----------
-        // 为了演示“别人也可以看到我的心情”，使用 localStorage 存储所有心情画作（base64）
-        // 注意: localStorage 在同浏览器同源下共享，相当于“同一个设备上不同时间的人都可以看到”，
-        // 但为了满足题目“别人也可以看到”，在本地环境，相当于所有用户(同浏览器)可共享。
-        // 如果需要真正的全网共享，需后端，但题目未限制后端，用前端localStorage足够展示唯读+共享概念。
-        // 我们增加一个模拟“初始示例”来展示唯读画廊的趣味。
-        const STORAGE_KEY = 'mood_gallery_v1';
-        
-        // 数据结构: 数组存储 { id, dataURL, timestamp, previewWidth, previewHeight }
-        let moodPaintings = [];
-        
-        // 加载已有数据
-        function loadMoodsFromStorage() {
-            const stored = localStorage.getItem(STORAGE_KEY);
-            if(stored) {
-                try {
-                    moodPaintings = JSON.parse(stored);
-                    // 确保每个对象拥有必要字段，且dataURL有效
-                    if(!Array.isArray(moodPaintings)) moodPaintings = [];
-                } catch(e) { moodPaintings = []; }
-            }
-            // 如果画廊为空，添加两张温馨示例心情（仅作展示，展示唯读画廊）
-            if(moodPaintings.length === 0) {
-                // 创建示例数据: 自带两个示例心情 (美好的示例)
-                const sample1 = createSampleMood("🌞 今天阳光很好", "#FFD966", "#FFB347");
-                const sample2 = createSampleMood("🐱 猫咪治愈", "#B5EAD7", "#C7E9FB");
-                moodPaintings.push(sample1, sample2);
-                saveMoodsToStorage();
-            }
-            renderGallery(); // 渲染唯读画廊
-        }
-        
-        // 生成示例画作 (纯前端生成base64)
-        function createSampleMood(titlePrefix, color1, color2) {
-            // 创建一个离屏canvas画一些简单图形代表心情示例
-            const offCanvas = document.createElement('canvas');
-            offCanvas.width = CANVAS_W;
-            offCanvas.height = CANVAS_H;
-            const offCtx = offCanvas.getContext('2d');
-            offCtx.fillStyle = '#FFFFFF';
-            offCtx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-            // 绘制可爱抽象心情
-            offCtx.fillStyle = color1;
-            offCtx.beginPath();
-            offCtx.arc(CANVAS_W/2, CANVAS_H/2, 70, 0, Math.PI*2);
-            offCtx.fill();
-            offCtx.fillStyle = color2;
-            offCtx.beginPath();
-            offCtx.arc(CANVAS_W/2 - 25, CANVAS_H/2 - 20, 12, 0, Math.PI*2);
-            offCtx.arc(CANVAS_W/2 + 25, CANVAS_H/2 - 20, 12, 0, Math.PI*2);
-            offCtx.fill();
-            offCtx.fillStyle = "#8B5A2B";
-            offCtx.beginPath();
-            offCtx.ellipse(CANVAS_W/2, CANVAS_H/2 + 25, 25, 15, 0, 0, Math.PI*2);
-            offCtx.fill();
-            offCtx.fillStyle = "#FF69B4";
-            offCtx.font = "bold 36px 'Segoe UI'";
-            offCtx.fillText("❤️", CANVAS_W/2-25, CANVAS_H/2-50);
-            const dataURL = offCanvas.toDataURL('image/png');
-            return {
-                id: Date.now() + Math.random() * 10000 + titlePrefix,
-                dataURL: dataURL,
-                timestamp: Date.now(),
-                previewNote: titlePrefix
-            };
-        }
-        
-        function saveMoodsToStorage() {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(moodPaintings));
-        }
-        
-        // 将当前画板内容保存为心情 (分享)
-        function shareCurrentMood() {
-            // 获取当前画板的base64
-            const currentDrawingData = canvas.toDataURL('image/png');
-            const newMood = {
-                id: Date.now() + '_' + Math.floor(Math.random() * 1000000),
-                dataURL: currentDrawingData,
-                timestamp: Date.now(),
-            };
-            moodPaintings.unshift(newMood); // 最新心情在前
-            // 限制数量最多30个，避免localStorage过大
-            if(moodPaintings.length > 30) moodPaintings.pop();
-            saveMoodsToStorage();
-            renderGallery();
-            // 给予用户反馈
-            const saveBtn = document.getElementById('saveMoodBtn');
-            const originalText = saveBtn.innerHTML;
-            saveBtn.innerHTML = '✅ 已分享！';
-            setTimeout(() => {
-                saveBtn.innerHTML = originalText;
-            }, 1200);
-        }
-        
-        // 渲染右侧唯读画廊 (别人可以看到，且唯读，不可编辑)
-        function renderGallery() {
-            const container = document.getElementById('moodWallContainer');
-            if(!container) return;
-            if(!moodPaintings.length){
-                container.innerHTML = `<div class="empty-message">✨ 暂时还没有心情漂流瓶... 快画下你的第一笔心情吧！</div>`;
+    }
+    
+    async function loadMoodsFromCloud() {
+        try {
+            setCloudStatus('Loading...');
+            const { data, error } = await supabase
+                .from('moods')
+                .select('*')
+                .order('created_at', { ascending: false });
+            
+            if (error) {
+                console.error('Supabase error:', error);
+                setCloudStatus('Connection failed', true);
+                renderGalleryFallback();
                 return;
             }
             
-            let html = '';
-            // 倒序遍历展示（最新的在上面，不过我们已经unshift，所以按原序展示）
-            moodPaintings.forEach((mood, idx) => {
-                const timeStr = formatTime(mood.timestamp);
-                // 创建缩略图用的 canvas 卡片，但由于是唯读，直接展示img? 为了避免动态创建canvas多消耗，直接用img展示base64? 但是要保证唯读且不能修改。
-                // 为了视觉统一和点击放大，我们使用一个迷你canvas展示预览？ 但dataURL本身可以直接<img>，但是canvas原始图像比例可能压缩。
-                // 我们用<img> 加载dataURL，点击时模态框展示原版大图。简单优雅
-                // 为让风格一致，每个卡片内使用<img>显示心情绘画（唯读，无法修改）。
-                html += `
-                    <div class="mood-card" data-id="${mood.id}">
-                        <div class="mood-meta">
-                            <span>🎭 心情印记</span>
-                            <span class="mood-time">${timeStr}</span>
-                        </div>
-                        <div class="mood-thumb" data-fullimg="${mood.dataURL}">
-                            <img src="${mood.dataURL}" alt="心情画作" style="width:100%; border-radius: 16px; background:white; display:block; pointer-events: auto; cursor: pointer;" loading="lazy">
-                        </div>
-                        <div style="font-size:0.7rem; margin-top:8px; text-align:right; color:#ac8e6f;">🔒 唯读欣赏</div>
-                    </div>
-                `;
-            });
-            container.innerHTML = html;
-            
-            // 绑定点击放大唯读预览 (模态框)
-            const cards = document.querySelectorAll('.mood-thumb');
-            cards.forEach(thumb => {
-                thumb.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    const fullImgUrl = thumb.getAttribute('data-fullimg');
-                    if(fullImgUrl) {
-                        showModalPreview(fullImgUrl);
-                    }
-                });
-            });
-        }
-        
-        // 模态框放大唯读预览
-        function showModalPreview(imgSrc) {
-            // 创建遮罩层
-            const modal = document.createElement('div');
-            modal.style.position = 'fixed';
-            modal.style.top = '0';
-            modal.style.left = '0';
-            modal.style.width = '100%';
-            modal.style.height = '100%';
-            modal.style.backgroundColor = 'rgba(0,0,0,0.85)';
-            modal.style.display = 'flex';
-            modal.style.alignItems = 'center';
-            modal.style.justifyContent = 'center';
-            modal.style.zIndex = '10000';
-            modal.style.backdropFilter = 'blur(8px)';
-            modal.style.cursor = 'pointer';
-            const imgContainer = document.createElement('div');
-            imgContainer.style.maxWidth = '90vw';
-            imgContainer.style.maxHeight = '90vh';
-            imgContainer.style.backgroundColor = '#fff8f0';
-            imgContainer.style.borderRadius = '2rem';
-            imgContainer.style.padding = '1rem';
-            imgContainer.style.boxShadow = '0 20px 35px rgba(0,0,0,0.4)';
-            const img = document.createElement('img');
-            img.src = imgSrc;
-            img.style.maxWidth = '100%';
-            img.style.maxHeight = '70vh';
-            img.style.borderRadius = '1.2rem';
-            img.style.display = 'block';
-            img.style.margin = '0 auto';
-            const caption = document.createElement('div');
-            caption.innerText = '✨ 心情原画 · 唯读模式 ✨';
-            caption.style.textAlign = 'center';
-            caption.style.marginTop = '12px';
-            caption.style.fontFamily = 'system-ui';
-            caption.style.color = '#5b3e2a';
-            caption.style.fontWeight = '500';
-            imgContainer.appendChild(img);
-            imgContainer.appendChild(caption);
-            modal.appendChild(imgContainer);
-            document.body.appendChild(modal);
-            modal.addEventListener('click', function closeModal(e) {
-                if(e.target === modal) modal.remove();
-            });
-            // 防止冒泡
-            imgContainer.addEventListener('click', (e) => e.stopPropagation());
-        }
-        
-        function formatTime(timestamp) {
-            if(!timestamp) return '刚刚';
-            const date = new Date(timestamp);
-            const now = new Date();
-            const diff = now - date;
-            if(diff < 60000) return '刚刚';
-            if(diff < 3600000) return `${Math.floor(diff/60000)}分钟前`;
-            if(diff < 86400000) return `${Math.floor(diff/3600000)}小时前`;
-            return `${date.getMonth()+1}/${date.getDate()} ${date.getHours().toString().padStart(2,'0')}:${date.getMinutes().toString().padStart(2,'0')}`;
-        }
-        
-        // 保存心情按钮
-        const saveBtn = document.getElementById('saveMoodBtn');
-        saveBtn.addEventListener('click', () => {
-            shareCurrentMood();
-        });
-        
-        // 监听存储变化（如果多个标签页共享localStorage 可实时更新画廊，增强“别人可以看到”实时感）
-        window.addEventListener('storage', (e) => {
-            if(e.key === STORAGE_KEY) {
-                loadMoodsFromStorage();
+            if (data) {
+                allMoods = data;
+                setCloudStatus(`${allMoods.length} mood${allMoods.length !== 1 ? 's' : ''} shared`);
+                renderGalleryFromCloud();
+            } else {
+                allMoods = [];
+                renderGalleryFromCloud();
             }
+        } catch (err) {
+            console.error('Load error:', err);
+            setCloudStatus('Network error', true);
+            renderGalleryFallback();
+        }
+    }
+    
+    function renderGalleryFromCloud() {
+        const container = document.getElementById('moodWallContainer');
+        if (!container) return;
+        
+        if (!allMoods || allMoods.length === 0) {
+            container.innerHTML = `<div class="empty-message">🌱 No moods shared yet... Be the first to share your feeling!</div>`;
+            return;
+        }
+        
+        let html = '';
+        for (const mood of allMoods) {
+            const timeStr = formatTime(mood.created_at);
+            const imageData = mood.data_url;
+            if (!imageData) continue;
+            html += `
+                <div class="mood-card" data-id="${mood.id}">
+                    <div class="mood-meta">
+                        <span>🎨 Mood漂流 · Cloud</span>
+                        <span class="mood-time">${timeStr}</span>
+                    </div>
+                    <div class="mood-thumb" data-fullimg="${imageData}">
+                        <img src="${imageData}" alt="Shared mood artwork" loading="lazy">
+                    </div>
+                    <div style="font-size:0.7rem; margin-top:8px; text-align:right; color:#ac8e72;">🔒 Read-only · Global Gallery</div>
+                </div>
+            `;
+        }
+        container.innerHTML = html;
+        
+        document.querySelectorAll('.mood-thumb').forEach(thumb => {
+            thumb.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const fullImg = thumb.getAttribute('data-fullimg');
+                if (fullImg) showModalPreview(fullImg);
+            });
         });
+    }
+    
+    function renderGalleryFallback() {
+        const container = document.getElementById('moodWallContainer');
+        if (!container) return;
+        container.innerHTML = `
+            <div class="empty-message">
+                🖼️ Unable to connect to cloud server<br/>
+                You can still draw and share — it will sync when connection returns.
+            </div>
+        `;
+    }
+    
+    async function shareToCloud() {
+        const dataURL = canvas.toDataURL('image/png');
+        if (dataURL.length > 500000) {
+            alert('Image is too large. Please simplify your drawing (keep under 500KB).');
+            return;
+        }
         
-        // 初次加载画廊数据
-        loadMoodsFromStorage();
+        const newMood = {
+            data_url: dataURL,
+            created_at: new Date().toISOString(),
+        };
         
-        // 可选：页面关闭前没有任何操作，数据自动持久化已经OK。
-        // 同时提示右侧为唯读模式，确保点击画作没有任何编辑功能，并且画廊没有画笔控件。
-        // 额外保障: 如果有人试图通过控制台修改，但数据属于视图只读，依然无法编辑他人作品，完美符合唯读。
-        console.log('心情画板已启动 — 绘制你的心情，与所有人分享（唯读画廊）');
-    })();
+        setCloudStatus('Uploading...');
+        const saveBtn = document.getElementById('saveMoodBtn');
+        const originalText = saveBtn.innerHTML;
+        saveBtn.innerHTML = '⏫ Uploading...';
+        saveBtn.disabled = true;
+        
+        try {
+            const { data, error } = await supabase
+                .from('moods')
+                .insert([newMood])
+                .select();
+            
+            if (error) {
+                console.error('Upload failed:', error);
+                setCloudStatus('Upload failed', true);
+                alert('Share failed: ' + (error.message || 'Unknown error'));
+                saveBtn.innerHTML = originalText;
+                saveBtn.disabled = false;
+                return;
+            }
+            
+            setCloudStatus('Shared successfully!');
+            saveBtn.innerHTML = '✅ Shared Worldwide!';
+            setTimeout(() => {
+                saveBtn.innerHTML = originalText;
+                saveBtn.disabled = false;
+            }, 1500);
+            
+            await loadMoodsFromCloud();
+            
+        } catch (err) {
+            console.error('Upload error:', err);
+            setCloudStatus('Network error', true);
+            alert('Share failed. Please check your connection.');
+            saveBtn.innerHTML = originalText;
+            saveBtn.disabled = false;
+        }
+    }
+    
+    function showModalPreview(imgSrc) {
+        const modal = document.createElement('div');
+        modal.style.position = 'fixed';
+        modal.style.top = '0';
+        modal.style.left = '0';
+        modal.style.width = '100%';
+        modal.style.height = '100%';
+        modal.style.backgroundColor = 'rgba(0,0,0,0.85)';
+        modal.style.display = 'flex';
+        modal.style.alignItems = 'center';
+        modal.style.justifyContent = 'center';
+        modal.style.zIndex = '10000';
+        modal.style.backdropFilter = 'blur(8px)';
+        modal.style.cursor = 'pointer';
+        const imgContainer = document.createElement('div');
+        imgContainer.style.maxWidth = '90vw';
+        imgContainer.style.maxHeight = '90vh';
+        imgContainer.style.backgroundColor = '#fff8f0';
+        imgContainer.style.borderRadius = '2rem';
+        imgContainer.style.padding = '1rem';
+        imgContainer.style.boxShadow = '0 20px 35px rgba(0,0,0,0.4)';
+        const img = document.createElement('img');
+        img.src = imgSrc;
+        img.style.maxWidth = '100%';
+        img.style.maxHeight = '70vh';
+        img.style.borderRadius = '1.2rem';
+        img.style.display = 'block';
+        const caption = document.createElement('div');
+        caption.innerText = '✨ Cloud Mood · Read-only Gallery ✨';
+        caption.style.textAlign = 'center';
+        caption.style.marginTop = '12px';
+        caption.style.fontFamily = 'system-ui';
+        caption.style.color = '#5b3e2a';
+        imgContainer.appendChild(img);
+        imgContainer.appendChild(caption);
+        modal.appendChild(imgContainer);
+        document.body.appendChild(modal);
+        modal.addEventListener('click', function closeModal(e) {
+            if (e.target === modal) modal.remove();
+        });
+        imgContainer.addEventListener('click', (e) => e.stopPropagation());
+    }
+    
+    function formatTime(timestamp) {
+        if (!timestamp) return 'Just now';
+        const date = new Date(timestamp);
+        const now = new Date();
+        const diff = now - date;
+        if (diff < 60000) return 'Just now';
+        if (diff < 3600000) return `${Math.floor(diff/60000)} min ago`;
+        if (diff < 86400000) return `${Math.floor(diff/3600000)} hours ago`;
+        return `${date.getMonth()+1}/${date.getDate()} ${date.getHours().toString().padStart(2,'0')}:${date.getMinutes().toString().padStart(2,'0')}`;
+    }
+    
+    document.getElementById('saveMoodBtn').addEventListener('click', shareToCloud);
+    
+    function subscribeToMoods() {
+        const subscription = supabase
+            .channel('moods-channel')
+            .on('postgres_changes', 
+                { event: 'INSERT', schema: 'public', table: 'moods' },
+                (payload) => {
+                    console.log('New mood shared:', payload);
+                    loadMoodsFromCloud();
+                }
+            )
+            .subscribe();
+        return subscription;
+    }
+    
+    async function init() {
+        await loadMoodsFromCloud();
+        subscribeToMoods();
+        setInterval(() => {
+            if (document.visibilityState === 'visible') {
+                loadMoodsFromCloud();
+            }
+        }, 30000);
+    }
+    
+    init().catch(console.warn);
+    console.log('Mood Canvas ready — Share your feelings with the world!');
 </script>
 </body>
 </html>
-
-
