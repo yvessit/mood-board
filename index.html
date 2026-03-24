@@ -3,10 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>心情画布 · 云端画廊 | 分享你的瞬间</title>
-    <!-- Firebase SDK (云端核心) -->
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    <title>心情画布 · 云端画廊 | 可删除画作</title>
     <style>
         * {
             margin: 0;
@@ -109,6 +106,11 @@
             transform: scale(0.96);
         }
 
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
         .btn-clear {
             background: #ffe6e6;
             color: #c23b22;
@@ -117,6 +119,17 @@
         .btn-save {
             background: #d4f1f9;
             color: #1f6e8c;
+        }
+
+        .btn-delete {
+            background: #ffe6e6;
+            color: #c23b22;
+            font-size: 0.7rem;
+            padding: 4px 12px;
+        }
+
+        .btn-delete:hover {
+            background: #ffc2c2;
         }
 
         .color-picker-wrap {
@@ -236,6 +249,7 @@
             border-radius: 20px;
             overflow: hidden;
             cursor: pointer;
+            position: relative;
         }
 
         .mood-thumb img {
@@ -243,6 +257,35 @@
             border-radius: 16px;
             display: block;
             background: white;
+        }
+
+        .card-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 8px;
+        }
+
+        .delete-btn {
+            background: #ffe6e6;
+            color: #c23b22;
+            border: none;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.7rem;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .delete-btn:hover {
+            background: #ffc2c2;
+            transform: scale(1.02);
+        }
+
+        .readonly-tag {
+            font-size: 0.65rem;
+            color: #ac8e72;
         }
 
         .empty-message {
@@ -291,7 +334,7 @@
         <div class="canvas-area">
             <div class="toolbar">
                 <div class="title-badge">
-                    🎨 Mood Canvas <small>· 云端共享</small>
+                    🎨 Mood Canvas <small>· 云端共享 · 可删除</small>
                 </div>
                 <div class="brush-controls">
                     <div class="color-picker-wrap">
@@ -309,373 +352,57 @@
             </div>
             <canvas id="drawCanvas" width="700" height="450" style="width:100%; height:auto; max-width:700px; aspect-ratio:700/450"></canvas>
             <div style="font-size: 0.7rem; text-align: center; margin-top: 12px; color:#b4865b;">
-                ✨ 绘制你的心情 → 点击「分享到云端」→ 所有人即时可见 (云端画廊)
+                ✨ 绘制你的心情 → 点击「分享到云端」→ 所有人即时可见 | 鼠标移到画作上可看到删除按钮
             </div>
         </div>
 
         <div class="gallery-area">
             <div class="gallery-header">
-                <h2>🌊 云端心情画廊 · 全世界的心情</h2>
+                <h2>🌊 云端心情画廊 · 可管理</h2>
                 <div style="display: flex; gap: 8px;">
-                    <div class="readonly-badge">🌐 实时云端</div>
+                    <div class="readonly-badge">🗑️ 可删除</div>
                     <div class="cloud-status" id="storageStatus">☁️ 连接中...</div>
                 </div>
             </div>
             <div id="moodWallContainer" class="mood-wall">
                 <div class="loading-spinner">🎨 正在从云端加载心情画作...</div>
             </div>
-            <footer>💡 点击任意画作放大 | 每次分享都会永久保存至云端，所有访客共同欣赏</footer>
+            <footer>💡 点击画作放大 | 点击「删除」按钮移除画作</footer>
         </div>
     </div>
 </div>
 
-<script>
-    // ================= 云端配置 (Firebase) =================
-    // 请替换为您的 Firebase 项目配置 (从 Firebase 控制台获取)
-    // 如果您还没有 Firebase 项目，请参照以下步骤:
-    // 1. 前往 https://console.firebase.google.com/ 创建项目
-    // 2. 添加 Web 应用，复制配置对象粘贴到下方
-    // 3. 在 Firestore Database 中创建数据库，并设置测试规则 (开发用)
+<script type="module">
+    // ================= 导入 Firebase SDK =================
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
+    import { 
+        getFirestore, 
+        collection, 
+        addDoc, 
+        deleteDoc,
+        doc,
+        query, 
+        orderBy, 
+        onSnapshot,
+        serverTimestamp 
+    } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+
+    // 您的 Firebase 配置
     const firebaseConfig = {
-    apiKey: "AIzaSyBnMFA0d8fpSIsB3dj7Jgy30n5m68JXhBI",
-    authDomain: "mood-canvas-6893b.firebaseapp.com",
-    projectId: "mood-canvas-6893b",
-    storageBucket: "mood-canvas-6893b.firebasestorage.app",
-    messagingSenderId: "528867103336",
-    appId: "1:528867103336:web:93003284eb16819f49a1dd"
-  };
-    
-    // 为了演示方便，如果没有配置真实的 Firebase，程序会提示并转为「演示模式-本地临时存储」
-    // 但为了满足「云端存储」核心需求，强烈建议您配置有效 Firebase 密钥。
-    // 这里提供优雅降级: 如果 Firebase 初始化失败或配置无效，将使用本地存储但给出提示；
-    // 但真实部署请填入正确配置，实现真正的云端共享。
-    
-    let db = null;
-    let cloudEnabled = false;
-    let moodsCollection = null;
-    let unsubscribeSnapshot = null;
-    let currentMoods = [];
-    
+        apiKey: "AIzaSyBnMFA0d8fpSIsB3dj7Jgy30n5m68JXhBI",
+        authDomain: "mood-canvas-6893b.firebaseapp.com",
+        projectId: "mood-canvas-6893b",
+        storageBucket: "mood-canvas-6893b.firebasestorage.app",
+        messagingSenderId: "528867103336",
+        appId: "1:528867103336:web:93003284eb16819f49a1dd"
+    };
+
     // 初始化 Firebase
-    function initFirebase() {
-        try {
-            if (firebaseConfig.apiKey === "AIzaSyDummyKeyReplaceWithYourOwn" || 
-                firebaseConfig.projectId === "your-project-id") {
-                console.warn("未配置有效的 Firebase 密钥，将运行在本地降级模式（仅演示）。");
-                updateStatusText("⚠️ 未配置云端", "#ffd966");
-                return false;
-            }
-            // 初始化 Firebase
-            if (!firebase.apps.length) {
-                firebase.initializeApp(firebaseConfig);
-            }
-            db = firebase.firestore();
-            // 测试连接: 尝试获取集合
-            moodsCollection = db.collection("mood_gallery");
-            // 测试读取 (仅用于验证)
-            return true;
-        } catch (err) {
-            console.error("Firebase 初始化失败:", err);
-            updateStatusText("❌ 云端不可用", "#ffaaaa");
-            return false;
-        }
-    }
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const moodsCollection = collection(db, "mood_gallery");
     
-    // 更新顶部状态标签
-    function updateStatusText(text, bgColor = "#cfe6cf") {
-        const statusEl = document.getElementById('storageStatus');
-        if (statusEl) {
-            statusEl.innerHTML = `☁️ ${text}`;
-            statusEl.style.background = bgColor;
-        }
-    }
-    
-    // 显示错误信息条 (临时)
-    function showErrorMsg(msg) {
-        const galleryArea = document.querySelector('.gallery-area');
-        let errDiv = document.getElementById('dynamicErrorToast');
-        if (!errDiv) {
-            errDiv = document.createElement('div');
-            errDiv.id = 'dynamicErrorToast';
-            errDiv.className = 'error-banner';
-            errDiv.style.marginTop = '10px';
-            galleryArea.appendChild(errDiv);
-        }
-        errDiv.innerText = msg;
-        setTimeout(() => {
-            if (errDiv) errDiv.style.opacity = '0';
-            setTimeout(() => {
-                if (errDiv && errDiv.parentNode) errDiv.parentNode.removeChild(errDiv);
-            }, 2000);
-        }, 3500);
-        errDiv.style.opacity = '1';
-    }
-    
-    // 添加示例云端数据 (当画廊为空时自动填充温馨示例)
-    async function seedExampleMoodsIfEmpty() {
-        if (!cloudEnabled || !moodsCollection) return;
-        try {
-            const snapshot = await moodsCollection.limit(1).get();
-            if (!snapshot.empty) return; // 已有数据，不填充
-            
-            // 创建两个示例心情画作 (让人感觉到温暖)
-            const sample1 = generateSampleMood("☀️ 阳光灿烂的日子", "#FFE0A3", "#F4A261");
-            const sample2 = generateSampleMood("🌙 宁静的夜晚", "#C4E0FA", "#6C91B2");
-            
-            await moodsCollection.add(sample1);
-            await moodsCollection.add(sample2);
-            console.log("✨ 已添加示例云端心情 (首次运行)");
-        } catch (err) {
-            console.warn("添加示例失败: ", err);
-        }
-    }
-    
-    // 生成示例画作 (base64)
-    function generateSampleMood(title, primaryColor, accentColor) {
-        const offCanvas = document.createElement('canvas');
-        offCanvas.width = 700;
-        offCanvas.height = 450;
-        const offCtx = offCanvas.getContext('2d');
-        offCtx.fillStyle = '#FFFFFF';
-        offCtx.fillRect(0, 0, 700, 450);
-        // 背景柔和形状
-        offCtx.fillStyle = primaryColor;
-        offCtx.beginPath();
-        offCtx.ellipse(350, 200, 180, 150, 0, 0, Math.PI * 2);
-        offCtx.fill();
-        offCtx.fillStyle = accentColor;
-        offCtx.beginPath();
-        offCtx.arc(270, 170, 22, 0, Math.PI * 2);
-        offCtx.arc(430, 170, 22, 0, Math.PI * 2);
-        offCtx.fill();
-        offCtx.fillStyle = "#6B4E3E";
-        offCtx.beginPath();
-        offCtx.arc(350, 260, 35, 0.1, Math.PI - 0.1);
-        offCtx.fill();
-        offCtx.fillStyle = "#FFF1D0";
-        offCtx.font = "bold 36px 'Segoe UI'";
-        offCtx.fillText(title === "☀️ 阳光灿烂的日子" ? "☀️" : "🌙", 320, 100);
-        const dataURL = offCanvas.toDataURL('image/png');
-        return {
-            dataURL: dataURL,
-            timestamp: Date.now(),
-            title: title,
-            createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        };
-    }
-    
-    // 渲染云端画廊 (基于实时数据)
-    function renderGalleryFromCloud(moodsArray) {
-        const container = document.getElementById('moodWallContainer');
-        if (!container) return;
-        
-        if (!moodsArray || moodsArray.length === 0) {
-            container.innerHTML = `<div class="empty-message">✨ 云端还没有心情画作… 快画一张分享给大家吧！ ✨</div>`;
-            return;
-        }
-        
-        let html = '';
-        for (const mood of moodsArray) {
-            const timeStr = formatTime(mood.timestamp);
-            // 安全获取图片URL
-            const imgUrl = mood.dataURL || '';
-            if (!imgUrl) continue;
-            html += `
-                <div class="mood-card">
-                    <div class="mood-meta">
-                        <span>🎨 云端共享 · ${escapeHtml(mood.title || '心情涂鸦')}</span>
-                        <span class="mood-time">${timeStr}</span>
-                    </div>
-                    <div class="mood-thumb" data-fullimg="${imgUrl}">
-                        <img src="${imgUrl}" alt="Shared mood from cloud" loading="lazy">
-                    </div>
-                    <div style="font-size:0.7rem; margin-top:8px; text-align:right; color:#ac8e72;">🌍 全球可见 · 实时同步</div>
-                </div>
-            `;
-        }
-        container.innerHTML = html;
-        
-        // 绑定放大预览事件
-        document.querySelectorAll('.mood-thumb').forEach(thumb => {
-            thumb.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const fullImg = thumb.getAttribute('data-fullimg');
-                if (fullImg) showModalPreview(fullImg);
-            });
-        });
-    }
-    
-    // 简单的防XSS
-    function escapeHtml(str) {
-        if (!str) return '';
-        return str.replace(/[&<>]/g, function(m) {
-            if (m === '&') return '&amp;';
-            if (m === '<') return '&lt;';
-            if (m === '>') return '&gt;';
-            return m;
-        });
-    }
-    
-    // 监听云端实时变化 (Firestore)
-    function subscribeCloudGallery() {
-        if (!cloudEnabled || !moodsCollection) {
-            // 降级模式：如果没有云端，显示友好提示并模拟本地演示（但实际上为了强调云端，展示无法使用云端的提示）
-            renderLocalFallbackMode();
-            return;
-        }
-        
-        try {
-            // 按时间倒序，最新的在上面
-            const query = moodsCollection.orderBy('timestamp', 'desc');
-            unsubscribeSnapshot = query.onSnapshot((snapshot) => {
-                const newMoods = [];
-                snapshot.forEach(doc => {
-                    const data = doc.data();
-                    newMoods.push({
-                        id: doc.id,
-                        dataURL: data.dataURL,
-                        timestamp: data.timestamp || (data.createdAt ? data.createdAt.toMillis() : Date.now()),
-                        title: data.title || '心情画作'
-                    });
-                });
-                currentMoods = newMoods;
-                renderGalleryFromCloud(currentMoods);
-                updateStatusText(`🌐 ${currentMoods.length} 幅云端画作`, "#b8e0b8");
-            }, (error) => {
-                console.error("监听云端失败:", error);
-                updateStatusText("⚠️ 同步失败", "#ffc2c2");
-                showErrorMsg("云端连接失败，请检查Firebase配置或网络: " + error.message);
-                renderLocalFallbackMode(true); // 展示云端不可用提示
-            });
-        } catch (err) {
-            console.error("订阅异常:", err);
-            updateStatusText("❌ 云端异常", "#ffaaaa");
-            renderLocalFallbackMode(true);
-        }
-    }
-    
-    // 降级模式：仅提示未配置云端，无法使用真正的云存储（符合预期，强调需要配置才能云端）
-    function renderLocalFallbackMode(showError = false) {
-        const container = document.getElementById('moodWallContainer');
-        if (container) {
-            container.innerHTML = `
-                <div class="empty-message" style="background:#fff0e0;">
-                    🚀 云端未配置 / 连接失败<br/>
-                    要体验真正的「云端画廊」，请在代码中配置有效的 Firebase 项目。<br/>
-                    🔧 步骤：1. 创建 Firebase 项目 2. 复制配置到 firebaseConfig 3. 开启 Firestore 数据库<br/>
-                    🌟 配置成功后，所有画作将实时同步给每一位访客！
-                </div>
-            `;
-        }
-        updateStatusText("⚠️ 未连接云端", "#ffd2a5");
-        if (showError) {
-            // 额外显示提示
-        }
-    }
-    
-    // 保存当前画作到云端 (核心)
-    async function shareCurrentMoodToCloud() {
-        if (!cloudEnabled || !moodsCollection) {
-            showErrorMsg("云端服务未就绪，请检查 Firebase 配置！无法保存到云端。");
-            updateStatusText("❌ 无法上传", "#ffaaaa");
-            return false;
-        }
-        
-        const saveBtn = document.getElementById('saveMoodBtn');
-        const originalText = saveBtn.innerHTML;
-        saveBtn.innerHTML = '⏳ 上传中...';
-        saveBtn.disabled = true;
-        
-        try {
-            const dataURL = canvas.toDataURL('image/png');
-            // 限制 base64 大小保护 (Firestore 单个文档 1M, base64约200~300KB，安全)
-            if (dataURL.length > 950000) {
-                showErrorMsg("画作数据过大，请简化绘画后重试 (限制1MB内)");
-                saveBtn.innerHTML = originalText;
-                saveBtn.disabled = false;
-                return false;
-            }
-            const newMood = {
-                dataURL: dataURL,
-                timestamp: Date.now(),
-                title: `🎨 心情 · ${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}`,
-                createdAt: firebase.firestore.FieldValue.serverTimestamp()
-            };
-            await moodsCollection.add(newMood);
-            saveBtn.innerHTML = '✅ 已分享至云端！';
-            updateStatusText("☁️ 分享成功!", "#b8e0b8");
-            setTimeout(() => {
-                if (saveBtn) saveBtn.innerHTML = originalText;
-                saveBtn.disabled = false;
-            }, 1500);
-            return true;
-        } catch (err) {
-            console.error("上传云端失败:", err);
-            showErrorMsg("上传失败: " + (err.message || "未知错误"));
-            saveBtn.innerHTML = originalText;
-            saveBtn.disabled = false;
-            updateStatusText("❌ 上传失败", "#ffaaaa");
-            return false;
-        }
-    }
-    
-    // 预览弹窗
-    function showModalPreview(imgSrc) {
-        const modal = document.createElement('div');
-        modal.style.position = 'fixed';
-        modal.style.top = '0';
-        modal.style.left = '0';
-        modal.style.width = '100%';
-        modal.style.height = '100%';
-        modal.style.backgroundColor = 'rgba(0,0,0,0.85)';
-        modal.style.display = 'flex';
-        modal.style.alignItems = 'center';
-        modal.style.justifyContent = 'center';
-        modal.style.zIndex = '10000';
-        modal.style.backdropFilter = 'blur(8px)';
-        modal.style.cursor = 'pointer';
-        const imgContainer = document.createElement('div');
-        imgContainer.style.maxWidth = '90vw';
-        imgContainer.style.maxHeight = '90vh';
-        imgContainer.style.backgroundColor = '#fff8f0';
-        imgContainer.style.borderRadius = '2rem';
-        imgContainer.style.padding = '1rem';
-        imgContainer.style.boxShadow = '0 20px 35px rgba(0,0,0,0.4)';
-        const img = document.createElement('img');
-        img.src = imgSrc;
-        img.style.maxWidth = '100%';
-        img.style.maxHeight = '70vh';
-        img.style.borderRadius = '1.2rem';
-        img.style.display = 'block';
-        const caption = document.createElement('div');
-        caption.innerText = '✨ 云端心情画廊 · 来自世界某个角落 ✨';
-        caption.style.textAlign = 'center';
-        caption.style.marginTop = '12px';
-        caption.style.fontFamily = 'system-ui';
-        caption.style.color = '#5b3e2a';
-        imgContainer.appendChild(img);
-        imgContainer.appendChild(caption);
-        modal.appendChild(imgContainer);
-        document.body.appendChild(modal);
-        modal.addEventListener('click', function closeModal(e) {
-            if (e.target === modal) modal.remove();
-        });
-        imgContainer.addEventListener('click', (e) => e.stopPropagation());
-    }
-    
-    // 辅助时间格式化
-    function formatTime(timestamp) {
-        if (!timestamp) return '刚刚';
-        const date = new Date(timestamp);
-        const now = new Date();
-        const diff = now - date;
-        if (diff < 60000) return '刚刚';
-        if (diff < 3600000) return `${Math.floor(diff/60000)} 分钟前`;
-        if (diff < 86400000) return `${Math.floor(diff/3600000)} 小时前`;
-        return `${date.getMonth()+1}/${date.getDate()} ${date.getHours().toString().padStart(2,'0')}:${date.getMinutes().toString().padStart(2,'0')}`;
-    }
-    
-    // =============== 绘画引擎 (与原版一致，保留所有绘制功能) ===============
+    // ================= 绘画引擎 =================
     const canvas = document.getElementById('drawCanvas');
     const ctx = canvas.getContext('2d');
     const CANVAS_W = 700;
@@ -777,47 +504,294 @@
         setBrush();
     });
     
-    // 保存按钮 -> 云端分享
-    const saveBtn = document.getElementById('saveMoodBtn');
-    saveBtn.addEventListener('click', () => {
-        if (cloudEnabled && moodsCollection) {
-            shareCurrentMoodToCloud();
-        } else {
-            showErrorMsg("云端服务未启用，请在代码中正确配置 Firebase 以使用真正的云端共享。");
-            updateStatusText("🚫 云端未配置", "#ffbb99");
+    // ================= 云端画廊功能 =================
+    function updateStatusText(text, bgColor = "#cfe6cf") {
+        const statusEl = document.getElementById('storageStatus');
+        if (statusEl) {
+            statusEl.innerHTML = `☁️ ${text}`;
+            statusEl.style.background = bgColor;
         }
-    });
+    }
     
-    // =============== 初始化应用: 尝试开启云端 ===============
-    (async function bootstrap() {
-        const isFirebaseReady = initFirebase();
-        if (isFirebaseReady && db) {
-            // 测试访问权限
+    function showErrorMsg(msg) {
+        const galleryArea = document.querySelector('.gallery-area');
+        let errDiv = document.getElementById('dynamicErrorToast');
+        if (!errDiv) {
+            errDiv = document.createElement('div');
+            errDiv.id = 'dynamicErrorToast';
+            errDiv.className = 'error-banner';
+            errDiv.style.marginTop = '10px';
+            galleryArea.appendChild(errDiv);
+        }
+        errDiv.innerText = msg;
+        errDiv.style.opacity = '1';
+        setTimeout(() => {
+            errDiv.style.opacity = '0';
+            setTimeout(() => {
+                if (errDiv && errDiv.parentNode) errDiv.remove();
+            }, 500);
+        }, 3000);
+    }
+    
+    function formatTime(timestamp) {
+        if (!timestamp) return '刚刚';
+        const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+        const now = new Date();
+        const diff = now - date;
+        if (diff < 60000) return '刚刚';
+        if (diff < 3600000) return `${Math.floor(diff/60000)} 分钟前`;
+        if (diff < 86400000) return `${Math.floor(diff/3600000)} 小时前`;
+        return `${date.getMonth()+1}/${date.getDate()} ${date.getHours().toString().padStart(2,'0')}:${date.getMinutes().toString().padStart(2,'0')}`;
+    }
+    
+    function showModalPreview(imgSrc) {
+        const modal = document.createElement('div');
+        modal.style.position = 'fixed';
+        modal.style.top = '0';
+        modal.style.left = '0';
+        modal.style.width = '100%';
+        modal.style.height = '100%';
+        modal.style.backgroundColor = 'rgba(0,0,0,0.85)';
+        modal.style.display = 'flex';
+        modal.style.alignItems = 'center';
+        modal.style.justifyContent = 'center';
+        modal.style.zIndex = '10000';
+        modal.style.backdropFilter = 'blur(8px)';
+        modal.style.cursor = 'pointer';
+        const imgContainer = document.createElement('div');
+        imgContainer.style.maxWidth = '90vw';
+        imgContainer.style.maxHeight = '90vh';
+        imgContainer.style.backgroundColor = '#fff8f0';
+        imgContainer.style.borderRadius = '2rem';
+        imgContainer.style.padding = '1rem';
+        imgContainer.style.boxShadow = '0 20px 35px rgba(0,0,0,0.4)';
+        const img = document.createElement('img');
+        img.src = imgSrc;
+        img.style.maxWidth = '100%';
+        img.style.maxHeight = '70vh';
+        img.style.borderRadius = '1.2rem';
+        img.style.display = 'block';
+        const caption = document.createElement('div');
+        caption.innerText = '✨ 云端心情画廊 · 点击任意位置关闭 ✨';
+        caption.style.textAlign = 'center';
+        caption.style.marginTop = '12px';
+        caption.style.fontFamily = 'system-ui';
+        caption.style.color = '#5b3e2a';
+        imgContainer.appendChild(img);
+        imgContainer.appendChild(caption);
+        modal.appendChild(imgContainer);
+        document.body.appendChild(modal);
+        modal.addEventListener('click', function closeModal(e) {
+            if (e.target === modal) modal.remove();
+        });
+        imgContainer.addEventListener('click', (e) => e.stopPropagation());
+    }
+    
+    // 删除画作
+    async function deleteMood(moodId, moodTitle) {
+        if (confirm(`确定要删除这幅画作吗？\n"${moodTitle}"\n此操作不可撤销。`)) {
             try {
-                const testRef = db.collection("mood_gallery").limit(1);
-                await testRef.get();
-                cloudEnabled = true;
-                updateStatusText("☁️ 云端已连接", "#a8e6cf");
-                // 订阅实时画廊
-                subscribeCloudGallery();
-                // 检查并填充示例数据 (如果空)
-                await seedExampleMoodsIfEmpty();
+                const moodDoc = doc(db, "mood_gallery", moodId);
+                await deleteDoc(moodDoc);
+                showErrorMsg(`✅ 已删除画作`);
+                console.log(`已删除: ${moodTitle}`);
             } catch (err) {
-                console.warn("Firestore 权限/配置错误:", err);
-                cloudEnabled = false;
-                updateStatusText("⚠️ 权限错误", "#ffc2a1");
-                renderLocalFallbackMode(true);
-                showErrorMsg("Firestore 数据库读写权限未开启，请在 Firebase 控制台设置测试规则 (allow read, write: if true; 开发模式)");
+                console.error('删除失败:', err);
+                showErrorMsg(`删除失败: ${err.message}`);
             }
-        } else {
-            cloudEnabled = false;
-            updateStatusText("⚠️ 无云端配置", "#ffc2a1");
-            renderLocalFallbackMode(true);
         }
-    })();
+    }
     
-    // 暴露全局以便调试 (非必要)
-    console.log("Mood Canvas 云端版已启动 — 绘制并分享到全球画廊");
+    function renderGallery(moodsArray) {
+        const container = document.getElementById('moodWallContainer');
+        if (!container) return;
+        
+        if (!moodsArray || moodsArray.length === 0) {
+            container.innerHTML = `<div class="empty-message">✨ 云端还没有心情画作… 快画一张分享给大家吧！ ✨</div>`;
+            return;
+        }
+        
+        let html = '';
+        for (const mood of moodsArray) {
+            const timeStr = formatTime(mood.timestamp);
+            const imgUrl = mood.dataURL || '';
+            if (!imgUrl) continue;
+            html += `
+                <div class="mood-card" data-id="${mood.id}">
+                    <div class="mood-meta">
+                        <span>🎨 云端共享 · ${escapeHtml(mood.title || '心情涂鸦')}</span>
+                        <span class="mood-time">${timeStr}</span>
+                    </div>
+                    <div class="mood-thumb" data-fullimg="${imgUrl}">
+                        <img src="${imgUrl}" alt="Shared mood from cloud" loading="lazy">
+                    </div>
+                    <div class="card-footer">
+                        <span class="readonly-tag">🌍 全球可见</span>
+                        <button class="delete-btn" data-id="${mood.id}" data-title="${escapeHtml(mood.title || '心情涂鸦')}">
+                            🗑️ 删除
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+        container.innerHTML = html;
+        
+        // 绑定预览事件
+        document.querySelectorAll('.mood-thumb').forEach(thumb => {
+            thumb.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const fullImg = thumb.getAttribute('data-fullimg');
+                if (fullImg) showModalPreview(fullImg);
+            });
+        });
+        
+        // 绑定删除事件
+        document.querySelectorAll('.delete-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const moodId = btn.getAttribute('data-id');
+                const moodTitle = btn.getAttribute('data-title');
+                if (moodId) deleteMood(moodId, moodTitle);
+            });
+        });
+    }
+    
+    function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/[&<>]/g, function(m) {
+            if (m === '&') return '&amp;';
+            if (m === '<') return '&lt;';
+            if (m === '>') return '&gt;';
+            return m;
+        });
+    }
+    
+    // 添加示例画作（如果画廊为空）
+    async function addSampleMoodsIfEmpty() {
+        try {
+            const q = query(moodsCollection, orderBy('timestamp', 'desc'));
+            const snapshot = await new Promise((resolve) => {
+                const unsubscribe = onSnapshot(q, (snap) => {
+                    unsubscribe();
+                    resolve(snap);
+                });
+            });
+            
+            if (snapshot.empty) {
+                const sampleMoods = [
+                    { dataURL: generateSampleDrawing('#FFD966', '#F4A261'), title: '☀️ 阳光灿烂的日子', timestamp: new Date() },
+                    { dataURL: generateSampleDrawing('#C4E0FA', '#6C91B2'), title: '🌙 宁静的夜晚', timestamp: new Date(Date.now() - 3600000) }
+                ];
+                for (const mood of sampleMoods) {
+                    await addDoc(moodsCollection, {
+                        dataURL: mood.dataURL,
+                        title: mood.title,
+                        timestamp: mood.timestamp,
+                        createdAt: serverTimestamp()
+                    });
+                }
+                console.log('✨ 已添加示例心情画作');
+            }
+        } catch (err) {
+            console.warn('添加示例失败:', err);
+        }
+    }
+    
+    function generateSampleDrawing(color1, color2) {
+        const offCanvas = document.createElement('canvas');
+        offCanvas.width = 700;
+        offCanvas.height = 450;
+        const offCtx = offCanvas.getContext('2d');
+        offCtx.fillStyle = '#FFFFFF';
+        offCtx.fillRect(0, 0, 700, 450);
+        offCtx.fillStyle = color1;
+        offCtx.beginPath();
+        offCtx.ellipse(350, 200, 180, 150, 0, 0, Math.PI * 2);
+        offCtx.fill();
+        offCtx.fillStyle = color2;
+        offCtx.beginPath();
+        offCtx.arc(270, 170, 22, 0, Math.PI * 2);
+        offCtx.arc(430, 170, 22, 0, Math.PI * 2);
+        offCtx.fill();
+        offCtx.fillStyle = "#6B4E3E";
+        offCtx.beginPath();
+        offCtx.arc(350, 260, 35, 0.1, Math.PI - 0.1);
+        offCtx.fill();
+        return offCanvas.toDataURL('image/png');
+    }
+    
+    // 实时监听云端数据
+    function subscribeToGallery() {
+        const q = query(moodsCollection, orderBy('timestamp', 'desc'));
+        
+        onSnapshot(q, (snapshot) => {
+            const moods = [];
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                moods.push({
+                    id: doc.id,
+                    dataURL: data.dataURL,
+                    timestamp: data.timestamp || data.createdAt,
+                    title: data.title || '心情画作'
+                });
+            });
+            renderGallery(moods);
+            updateStatusText(`${moods.length} 幅云端画作`, "#a8e6cf");
+        }, (error) => {
+            console.error('监听云端失败:', error);
+            updateStatusText("连接失败", "#ffc2c2");
+            showErrorMsg('云端连接失败: ' + error.message);
+        });
+    }
+    
+    // 分享当前画作到云端
+    async function shareToCloud() {
+        const saveBtn = document.getElementById('saveMoodBtn');
+        const originalText = saveBtn.innerHTML;
+        saveBtn.innerHTML = '⏳ 上传中...';
+        saveBtn.disabled = true;
+        
+        try {
+            const dataURL = canvas.toDataURL('image/png');
+            if (dataURL.length > 1000000) {
+                showErrorMsg('画作数据过大，请简化绘画后重试');
+                saveBtn.innerHTML = originalText;
+                saveBtn.disabled = false;
+                return;
+            }
+            
+            await addDoc(moodsCollection, {
+                dataURL: dataURL,
+                title: `🎨 心情 · ${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}`,
+                timestamp: new Date(),
+                createdAt: serverTimestamp()
+            });
+            
+            saveBtn.innerHTML = '✅ 已分享至云端！';
+            updateStatusText("分享成功!", "#b8e0b8");
+            setTimeout(() => {
+                saveBtn.innerHTML = originalText;
+                saveBtn.disabled = false;
+            }, 1500);
+        } catch (err) {
+            console.error('上传失败:', err);
+            showErrorMsg('上传失败: ' + err.message);
+            saveBtn.innerHTML = originalText;
+            saveBtn.disabled = false;
+            updateStatusText("上传失败", "#ffaaaa");
+        }
+    }
+    
+    // ================= 初始化应用 =================
+    document.getElementById('saveMoodBtn').addEventListener('click', shareToCloud);
+    
+    // 启动实时画廊
+    subscribeToGallery();
+    // 添加示例数据（如果为空）
+    setTimeout(() => addSampleMoodsIfEmpty(), 1000);
+    
+    updateStatusText("云端已连接", "#a8e6cf");
+    console.log('🎨 Mood Canvas 云端版已启动 - 支持删除画作！');
 </script>
 </body>
 </html>
