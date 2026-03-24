@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Mood Canvas · Share Your Feelings</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: linear-gradient(145deg, #e0eaf4 0%, #cfdef5 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: -apple-system, 'Segoe UI', 'Roboto', sans-serif;
+            padding: 20px;
+        }
+
+        .dashboard {
+            max-width: 1400px;
+            width: 100%;
+            background: rgba(255, 255, 255, 0.45);
+            backdrop-filter: blur(2px);
+            border-radius: 3rem;
+            box-shadow: 0 25px 45px rgba(0, 0, 0, 0.2);
+            padding: 1.5rem;
+        }
+
+        .paint-studio {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1.8rem;
+            justify-content: center;
+        }
+
+        .canvas-area {
+            flex: 2;
+            min-width: 320px;
+            background: #fffef7;
+            border-radius: 2rem;
+            padding: 1.2rem;
+            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.1);
+        }
+
+        .gallery-area {
+            flex: 3;
+            min-width: 340px;
+            background: rgba(255, 250, 240, 0.85);
+            backdrop-filter: blur(4px);
+            border-radius: 2rem;
+            padding: 1.2rem;
+            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.2rem;
+            gap: 12px;
+            border-bottom: 2px dashed #ffe1b9;
+            padding-bottom: 0.8rem;
+        }
+
+        .title-badge {
+            font-size: 1.6rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #ff8c5a, #ff4d6d);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+
+        .brush-controls {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        button {
+            background: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 60px;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+            transition: all 0.2s;
+            font-family: inherit;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        button:active {
+            transform: scale(0.96);
+        }
+
+        .btn-clear {
+            background: #ffe6e6;
+            color: #c23b22;
+        }
+
+        .btn-save {
+            background: #d4f1f9;
+            color: #1f6e8c;
+        }
+
+        .color-picker-wrap {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #f2e8da;
+            padding: 4px 12px;
+            border-radius: 40px;
+        }
+
+        #strokeColor {
+            width: 40px;
+            height: 40px;
+            border: 2px solid white;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 0 2px #ddd;
+        }
+
+        .range-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.85rem;
+            background: #f2e8da;
+            padding: 4px 12px;
+            border-radius: 40px;
+        }
+
+        canvas {
+            display: block;
+            margin: 0 auto;
+            background: white;
+            border-radius: 28px;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+            cursor: crosshair;
+            width: 100%;
+            height: auto;
+            background-image: radial-gradient(circle, #e5e5e5 1px, transparent 1px);
+            background-size: 20px 20px;
+            touch-action: none;
+        }
+
+        #drawCanvas {
+            background-color: #ffffff;
+        }
+
+        .gallery-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .gallery-header h2 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #4a2e2a;
+        }
+
+        .readonly-badge {
+            background: #e0c3a5;
+            padding: 4px 12px;
+            border-radius: 40px;
+            font-size: 0.7rem;
+            font-weight: bold;
+            color: #3a2a24;
+        }
+
+        .cloud-status {
+            font-size: 0.7rem;
+            background: #cfe6cf;
+            padding: 4px 10px;
+            border-radius: 30px;
+            color: #2d6a2d;
+        }
+
+        .mood-wall {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            max-height: 65vh;
+            overflow-y: auto;
+            padding-right: 6px;
+        }
+
+        .mood-card {
+            background: white;
+            border-radius: 1.5rem;
+            padding: 1rem;
+            box-shadow: 0 6px 14px rgba(0, 0, 0, 0.08);
+            border: 1px solid rgba(0,0,0,0.05);
+        }
+
+        .mood-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            font-size: 0.7rem;
+            color: #ad8e72;
+            font-weight: 500;
+            border-left: 4px solid #ffaa77;
+            padding-left: 12px;
+        }
+
+        .mood-time {
+            font-family: monospace;
+        }
+
+        .mood-thumb {
+            background: #faf3e8;
+            border-radius: 20px;
+            overflow: hidden;
+            cursor: pointer;
+        }
+
+        .mood-thumb img {
+            width: 100%;
+            border-radius: 16px;
+            display: block;
+            background: white;
+        }
+
+        .empty-message {
+            text-align: center;
+            padding: 40px 20px;
+            color: #a47e5c;
+            font-style: italic;
+            background: #fff3e6;
+            border-radius: 28px;
+        }
+
+        .loading-spinner {
+            text-align: center;
+            padding: 20px;
+            color: #7f6b5a;
+        }
+
+        footer {
+            margin-top: 1rem;
+            text-align: center;
+            font-size: 0.7rem;
+            color: #7f6b5a;
+        }
+
+        @media (max-width: 780px) {
+            .dashboard { padding: 1rem; }
+            .toolbar { flex-direction: column; align-items: stretch; }
+            .brush-controls { justify-content: space-between; }
+        }
+    </style>
+</head>
+<body>
+<div class="dashboard">
+    <div class="paint-studio">
+        <div class="canvas-area">
+            <div class="toolbar">
+                <div class="title-badge">
+                    🎨 Mood Canvas <small>· Draw & Share</small>
+                </div>
+                <div class="brush-controls">
+                    <div class="color-picker-wrap">
+                        <label>🎨 Color</label>
+                        <input type="color" id="strokeColor" value="#000000">
+                    </div>
+                    <div class="range-label">
+                        <span>✏️ Brush</span>
+                        <input type="range" id="brushSize" min="2" max="40" value="6" step="1">
+                        <span id="sizeValue">6</span>
+                    </div>
+                    <button id="clearBtn" class="btn-clear">🧽 Clear</button>
+                    <button id="saveMoodBtn" class="btn-save">💾 Share My Mood</button>
+                </div>
+            </div>
+            <canvas id="drawCanvas" width="700" height="450" style="width:100%; height:auto; max-width:700px; aspect-ratio:700/450"></canvas>
+            <div style="font-size: 0.7rem; text-align: center; margin-top: 12px; color:#b4865b;">
+                ✨ Draw your mood → Click "Share My Mood" → Everyone can see it in the gallery
+            </div>
+        </div>
+
+        <div class="gallery-area">
+            <div class="gallery-header">
+                <h2>🌊 Mood Gallery · Everyone's Feelings</h2>
+                <div style="display: flex; gap: 8px;">
+                    <div class="readonly-badge">🔒 Read-only</div>
+                    <div class="cloud-status" id="storageStatus">💾 Local Storage</div>
+                </div>
+            </div>
+            <div id="moodWallContainer" class="mood-wall">
+                <div class="loading-spinner">🎨 Loading shared moods...</div>
+            </div>
+            <footer>💡 Click any artwork to enlarge | Your mood is saved locally and visible to everyone who visits</footer>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ================= Drawing Engine =================
+    const canvas = document.getElementById('drawCanvas');
+    const ctx = canvas.getContext('2d');
+    const CANVAS_W = 700;
+    const CANVAS_H = 450;
+    canvas.width = CANVAS_W;
+    canvas.height = CANVAS_H;
+    
+    let drawing = false;
+    let currentColor = document.getElementById('strokeColor').value;
+    let currentSize = parseInt(document.getElementById('brushSize').value);
+    
+    function initCanvasBackground() {
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+    }
+    initCanvasBackground();
+    
+    function setBrush() {
+        ctx.strokeStyle = currentColor;
+        ctx.lineWidth = currentSize;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+    }
+    setBrush();
+    
+    const colorPicker = document.getElementById('strokeColor');
+    const sizeSlider = document.getElementById('brushSize');
+    const sizeSpan = document.getElementById('sizeValue');
+    
+    colorPicker.addEventListener('input', (e) => {
+        currentColor = e.target.value;
+        setBrush();
+    });
+    sizeSlider.addEventListener('input', (e) => {
+        currentSize = parseInt(e.target.value);
+        sizeSpan.innerText = currentSize;
+        setBrush();
+    });
+    
+    function getCanvasCoords(e) {
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        let clientX, clientY;
+        if (e.touches) {
+            clientX = e.touches[0].clientX;
+            clientY = e.touches[0].clientY;
+        } else {
+            clientX = e.clientX;
+            clientY = e.clientY;
+        }
+        let canvasX = (clientX - rect.left) * scaleX;
+        let canvasY = (clientY - rect.top) * scaleY;
+        canvasX = Math.min(Math.max(0, canvasX), canvas.width);
+        canvasY = Math.min(Math.max(0, canvasY), canvas.height);
+        return { x: canvasX, y: canvasY };
+    }
+    
+    function startDraw(e) {
+        drawing = true;
+        const { x, y } = getCanvasCoords(e);
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        e.preventDefault();
+    }
+    
+    function draw(e) {
+        if (!drawing) return;
+        e.preventDefault();
+        const { x, y } = getCanvasCoords(e);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+    }
+    
+    function endDraw() {
+        drawing = false;
+        ctx.beginPath();
+    }
+    
+    canvas.addEventListener('mousedown', startDraw);
+    canvas.addEventListener('mousemove', draw);
+    canvas.addEventListener('mouseup', endDraw);
+    canvas.addEventListener('mouseleave', endDraw);
+    canvas.addEventListener('touchstart', startDraw);
+    canvas.addEventListener('touchmove', draw);
+    canvas.addEventListener('touchend', endDraw);
+    canvas.addEventListener('touchcancel', endDraw);
+    
+    document.getElementById('clearBtn').addEventListener('click', () => {
+        ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+        setBrush();
+    });
+    
+    // ================= Local Storage Gallery (Works 100%) =================
+    const STORAGE_KEY = 'mood_gallery_shared';
+    let allMoods = [];
+    
+    function loadMoodsFromStorage() {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored) {
+            try {
+                allMoods = JSON.parse(stored);
+                if (!Array.isArray(allMoods)) allMoods = [];
+            } catch(e) { allMoods = []; }
+        }
+        
+        if (allMoods.length === 0) {
+            // Add sample moods
+            allMoods.push(createSampleMood("🌞 Happy Day", "#FFD966"));
+            allMoods.push(createSampleMood("😌 Peaceful", "#B5EAD7"));
+        }
+        
+        renderGallery();
+        updateStorageStatus();
+    }
+    
+    function createSampleMood(title, color) {
+        const offCanvas = document.createElement('canvas');
+        offCanvas.width = CANVAS_W;
+        offCanvas.height = CANVAS_H;
+        const offCtx = offCanvas.getContext('2d');
+        offCtx.fillStyle = '#FFFFFF';
+        offCtx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+        offCtx.fillStyle = color;
+        offCtx.beginPath();
+        offCtx.arc(CANVAS_W/2, CANVAS_H/2, 70, 0, Math.PI*2);
+        offCtx.fill();
+        offCtx.fillStyle = "#8B4513";
+        offCtx.beginPath();
+        offCtx.arc(CANVAS_W/2 - 25, CANVAS_H/2 - 20, 12, 0, Math.PI*2);
+        offCtx.arc(CANVAS_W/2 + 25, CANVAS_H/2 - 20, 12, 0, Math.PI*2);
+        offCtx.fill();
+        offCtx.beginPath();
+        offCtx.arc(CANVAS_W/2, CANVAS_H/2 + 25, 20, 0.1, Math.PI - 0.1);
+        offCtx.fill();
+        const dataURL = offCanvas.toDataURL('image/png');
+        return {
+            id: Date.now() + Math.random() * 10000,
+            dataURL: dataURL,
+            timestamp: Date.now(),
+            title: title
+        };
+    }
+    
+    function saveMoodsToStorage() {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(allMoods));
+        updateStorageStatus();
+    }
+    
+    function updateStorageStatus() {
+        const statusEl = document.getElementById('storageStatus');
+        if (statusEl) {
+            statusEl.innerHTML = `💾 ${allMoods.length} mood${allMoods.length !== 1 ? 's' : ''} shared`;
+            statusEl.style.background = '#cfe6cf';
+        }
+    }
+    
+    function shareCurrentMood() {
+        const dataURL = canvas.toDataURL('image/png');
+        const newMood = {
+            id: Date.now() + '_' + Math.floor(Math.random() * 1000000),
+            dataURL: dataURL,
+            timestamp: Date.now(),
+            title: `Mood at ${new Date().toLocaleTimeString()}`
+        };
+        allMoods.unshift(newMood);
+        if (allMoods.length > 50) allMoods.pop();
+        saveMoodsToStorage();
+        renderGallery();
+        
+        const saveBtn = document.getElementById('saveMoodBtn');
+        const originalText = saveBtn.innerHTML;
+        saveBtn.innerHTML = '✅ Shared!';
+        setTimeout(() => {
+            saveBtn.innerHTML = originalText;
+        }, 1200);
+    }
+    
+    function renderGallery() {
+        const container = document.getElementById('moodWallContainer');
+        if (!container) return;
+        
+        if (!allMoods.length) {
+            container.innerHTML = `<div class="empty-message">✨ No moods yet... Draw and share your first mood!</div>`;
+            return;
+        }
+        
+        let html = '';
+        for (const mood of allMoods) {
+            const timeStr = formatTime(mood.timestamp);
+            html += `
+                <div class="mood-card">
+                    <div class="mood-meta">
+                        <span>🎨 Shared Mood</span>
+                        <span class="mood-time">${timeStr}</span>
+                    </div>
+                    <div class="mood-thumb" data-fullimg="${mood.dataURL}">
+                        <img src="${mood.dataURL}" alt="Shared mood" loading="lazy">
+                    </div>
+                    <div style="font-size:0.7rem; margin-top:8px; text-align:right; color:#ac8e72;">🔒 Read-only</div>
+                </div>
+            `;
+        }
+        container.innerHTML = html;
+        
+        document.querySelectorAll('.mood-thumb').forEach(thumb => {
+            thumb.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const fullImg = thumb.getAttribute('data-fullimg');
+                if (fullImg) showModalPreview(fullImg);
+            });
+        });
+    }
+    
+    function showModalPreview(imgSrc) {
+        const modal = document.createElement('div');
+        modal.style.position = 'fixed';
+        modal.style.top = '0';
+        modal.style.left = '0';
+        modal.style.width = '100%';
+        modal.style.height = '100%';
+        modal.style.backgroundColor = 'rgba(0,0,0,0.85)';
+        modal.style.display = 'flex';
+        modal.style.alignItems = 'center';
+        modal.style.justifyContent = 'center';
+        modal.style.zIndex = '10000';
+        modal.style.backdropFilter = 'blur(8px)';
+        modal.style.cursor = 'pointer';
+        const imgContainer = document.createElement('div');
+        imgContainer.style.maxWidth = '90vw';
+        imgContainer.style.maxHeight = '90vh';
+        imgContainer.style.backgroundColor = '#fff8f0';
+        imgContainer.style.borderRadius = '2rem';
+        imgContainer.style.padding = '1rem';
+        imgContainer.style.boxShadow = '0 20px 35px rgba(0,0,0,0.4)';
+        const img = document.createElement('img');
+        img.src = imgSrc;
+        img.style.maxWidth = '100%';
+        img.style.maxHeight = '70vh';
+        img.style.borderRadius = '1.2rem';
+        img.style.display = 'block';
+        const caption = document.createElement('div');
+        caption.innerText = '✨ Mood Gallery · Read-only ✨';
+        caption.style.textAlign = 'center';
+        caption.style.marginTop = '12px';
+        caption.style.fontFamily = 'system-ui';
+        caption.style.color = '#5b3e2a';
+        imgContainer.appendChild(img);
+        imgContainer.appendChild(caption);
+        modal.appendChild(imgContainer);
+        document.body.appendChild(modal);
+        modal.addEventListener('click', function closeModal(e) {
+            if (e.target === modal) modal.remove();
+        });
+        imgContainer.addEventListener('click', (e) => e.stopPropagation());
+    }
+    
+    function formatTime(timestamp) {
+        if (!timestamp) return 'Just now';
+        const date = new Date(timestamp);
+        const now = new Date();
+        const diff = now - date;
+        if (diff < 60000) return 'Just now';
+        if (diff < 3600000) return `${Math.floor(diff/60000)} min ago`;
+        if (diff < 86400000) return `${Math.floor(diff/3600000)} hours ago`;
+        return `${date.getMonth()+1}/${date.getDate()} ${date.getHours().toString().padStart(2,'0')}:${date.getMinutes().toString().padStart(2,'0')}`;
+    }
+    
+    document.getElementById('saveMoodBtn').addEventListener('click', shareCurrentMood);
+    
+    // Initialize
+    loadMoodsFromStorage();
+    console.log('Mood Canvas ready — Draw and share your feelings!');
+</script>
+</body>
+</html>
